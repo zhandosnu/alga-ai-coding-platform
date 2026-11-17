@@ -1,0 +1,112 @@
+
+services:
+  # ─── MongoDB ──────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: alga-mongodb
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-alga}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-algapass}
+      MONGO_INITDB_DATABASE: alga
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - alga-net
+
+  # ─── Ollama (Local LLM Server) ────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: alga-ollama
+    restart: unless-stopped
+    ports:
+      - '11434:11434'
+    volumes:
+      # Mount host Ollama data so cloud model auth keys are available
+      - ${USERPROFILE}/.ollama:/root/.ollama
+    environment:
+      - OLLAMA_NUM_GPU=1          # Use RTX 3050 for inference
+    networks:
+      - alga-net
+    # NVIDIA GPU acceleration (RTX 3050 — CUDA 12.7)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ─── NestJS Backend ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alga-backend
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-alga}:${MONGO_ROOT_PASS:-algapass}@mongodb:27017/alga?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-change-in-prod}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      AI_SERVICE_URL: http://ai-service:8000
+      SANDBOX_PYTHON_IMAGE: alga-sandbox-python
+      SANDBOX_CPP_IMAGE: alga-sandbox-cpp
+      SANDBOX_TIMEOUT_MS: ${SANDBOX_TIMEOUT_MS:-10000}
+      SANDBOX_MEMORY_MB: ${SANDBOX_MEMORY_MB:-256}
+    volumes:
+      # Mount Docker socket so backend can spawn sandbox containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/alga-sandbox:/tmp/alga-sandbox
+    depends_on:
+      - mongodb
+      - ai-service
+    networks:
+      - alga-net
+
+  # ─── Python FastAPI AI Service ────────────────────────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: alga-ai-service
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
+    depends_on:
+      - ollama
+    networks:
+      - alga-net
+
+  # ─── Next.js Frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: alga-frontend
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_APP_NAME: Alga
+    depends_on:
+      - backend
+    networks:
+      - alga-net
+
+volumes:
+  mongodb_data:
+
+networks:
+  alga-net:
+    driver: bridge

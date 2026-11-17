@@ -1,0 +1,48 @@
+# Node.js / Next.js / NestJS
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/coverage/
+**/.turbo/
+**/.cache/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+**/__pycache__/
+*.py[cod]
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Secrets and local environment settings
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local data / generated output
+*.db
+*.sqlite
+*.sqlite3
+*.pid
+/tmp/
